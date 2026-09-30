@@ -31,3 +31,13 @@ This repository operates under a **Dual-Licensing Model** (Free for Non-Commerci
 
 **⚠️ Important Restriction for all users:**
 Regardless of whether you use the free or paid tier, **you are strictly prohibited from reselling or redistributing this source code (unmodified or modified) as a standalone plugin, asset pack, template, or development tool.** For the complete legal terms, please read the [LICENSE](https://github.com/SilvanTeufel/RTSUnitTemplate/blob/main/LICENSE.txt) file included in this repository.
+
+# GIT - How to sync this fork with Silvan's origin
+
+ git remote -v (just to show that this fork is "upstream")
+
+ git fetch upstream 
+
+ git merge upstream/main
+
+ git push origin main
