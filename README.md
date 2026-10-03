@@ -41,3 +41,9 @@ Regardless of whether you use the free or paid tier, **you are strictly prohibit
  git merge upstream/main
 
  git push origin main
+
+# DLL Rebuild(after pull/sync)
+
+ Open "PowerShell" as admin
+
+ Run - & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" AlliesEditor Win64 Development "-Project=c:\Users\Orel Natan\Documents\Unreal Projects\Allies\Allies.uproject" -WaitMutex
