@@ -265,6 +265,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ZoomSpeed = 120.f;
 
+	/** Longest spring-arm length the wheel and zoom-out keys can reach. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float MaxZoomOutArmLength = 2500.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float FastZoomSpeed = 250.f;
 

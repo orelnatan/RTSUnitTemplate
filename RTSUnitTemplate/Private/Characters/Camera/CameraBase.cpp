@@ -349,9 +349,15 @@ void ACameraBase::ZoomOut(float ZoomMultiplier, bool Decelerate) {
 		CurrentCamSpeed.Z = 0.f;
 	
 	float zoomAmount = 0.3f * (-1) * CurrentCamSpeed.Z * ZoomMultiplier;
-	
-	if(SpringArm)
-		SpringArm->TargetArmLength += zoomAmount;
+
+	// Same idea as the zoom-in floor in ZoomIn: once the arm is at the cap, further
+	// zoom-out steps are dropped. Min keeps a large step from passing the cap.
+	if (SpringArm && SpringArm->TargetArmLength < MaxZoomOutArmLength)
+	{
+		SpringArm->TargetArmLength = FMath::Min(
+			SpringArm->TargetArmLength + zoomAmount,
+			MaxZoomOutArmLength);
+	}
 	
 }
 
