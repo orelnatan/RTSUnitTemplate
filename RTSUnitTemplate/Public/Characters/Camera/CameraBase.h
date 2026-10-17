@@ -52,6 +52,25 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
 	bool UseNavBoundMinMax = true;
+
+	/**
+	 * Keep the pawn a fixed height above the landscape while panning.
+	 * Cubes and other static meshes are ignored so they cannot lift or pin the camera.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	bool bFollowTerrainHeight = true;
+
+	/** Extra centimeters above the landscape, added on top of the capsule half-height. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	float TerrainFollowHeightOffset = 10.f;
+
+	/** How quickly the pawn height eases toward the landscape (1/s). 0 = snap. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	float TerrainFollowInterpSpeed = 6.f;
+
+	/** How far above and below the pawn the ground trace looks. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Limits")
+	float TerrainFollowTraceRange = 5000.f;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -186,6 +205,9 @@ private:
 
 	/** Fuehrt den sichtbaren Winkel an das Mausziel heran; wird aus Tick gerufen. */
 	void TickCameraAngleSmoothing(float DeltaTime);
+
+	/** Eases pawn Z onto the landscape only; skips props so the camera cannot get stuck. */
+	void TickTerrainFollow(float DeltaTime);
 
 public:
 

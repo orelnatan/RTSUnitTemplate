@@ -9,6 +9,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "AIController.h"
 #include "Landscape.h"
+#include "LandscapeProxy.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "UnrealEngine.h"
@@ -90,8 +91,69 @@ void ACameraBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	SetActorBasicLocation();
+	TickTerrainFollow(DeltaTime);
 	TickCameraAngleSmoothing(DeltaTime);
 	TickCameraAngleReturn(DeltaTime);
+}
+
+void ACameraBase::TickTerrainFollow(float DeltaTime)
+{
+	if (!bFollowTerrainHeight)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FVector Location = GetActorLocation();
+	const FVector TraceStart = Location + FVector(0.f, 0.f, TerrainFollowTraceRange);
+	const FVector TraceEnd = Location - FVector(0.f, 0.f, TerrainFollowTraceRange);
+
+	TArray<FHitResult> Hits;
+	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(CameraTerrainFollow), false, this);
+	if (!World->LineTraceMultiByChannel(Hits, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+	{
+		return;
+	}
+
+	const FHitResult* LandscapeHit = nullptr;
+	for (const FHitResult& Hit : Hits)
+	{
+		if (const AActor* HitActor = Hit.GetActor())
+		{
+			if (HitActor->IsA(ALandscapeProxy::StaticClass()))
+			{
+				LandscapeHit = &Hit;
+				break;
+			}
+		}
+	}
+
+	if (!LandscapeHit)
+	{
+		return;
+	}
+
+	float TargetZ = LandscapeHit->Location.Z + TerrainFollowHeightOffset;
+	if (const UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		TargetZ += Capsule->GetScaledCapsuleHalfHeight();
+	}
+
+	const float NewZ = (TerrainFollowInterpSpeed <= 0.f)
+		? TargetZ
+		: FMath::FInterpTo(Location.Z, TargetZ, DeltaTime, TerrainFollowInterpSpeed);
+
+	if (FMath::IsNearlyEqual(NewZ, Location.Z, 0.1f))
+	{
+		return;
+	}
+
+	SetActorLocation(FVector(Location.X, Location.Y, NewZ));
 }
 
 void ACameraBase::BeginCameraAngleAdjust()
@@ -214,7 +276,7 @@ void ACameraBase::CreateCameraComp()
 
 void ACameraBase::PanMoveCamera(const FVector& NewPanDirection) {
 	if (NewPanDirection != FVector::ZeroVector) {
-		AddActorWorldOffset(NewPanDirection * GetActorLocation().Z * 0.001);
+		AddActorWorldOffset(NewPanDirection);
 	}
 }
 
@@ -251,7 +313,7 @@ void ACameraBase::PanMoveCameraSmoothed(const FVector& NewPanDirection, float De
 	// Auf 60 Bilder je Sekunde normiert: der alte Pfad rechnete ohne DeltaTime, war also
 	// bildratenabhaengig. Der Faktor haelt die gewohnte Geschwindigkeit bei 60 fps und macht sie
 	// darunter und darueber gleich schnell.
-	AddActorWorldOffset(CurrentPanVelocity * GetActorLocation().Z * 0.001 * DeltaTime * 60.f);
+	AddActorWorldOffset(CurrentPanVelocity * DeltaTime * 60.f);
 }
 
 void ACameraBase::RotateSpringArm(bool Invert)
