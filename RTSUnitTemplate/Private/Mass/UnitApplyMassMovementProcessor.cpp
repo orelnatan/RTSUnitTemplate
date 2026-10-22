@@ -317,7 +317,7 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
 
             FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
             AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
-            const FVector EffectiveAvoidanceForce = RedirectedAvoidanceForce(HorizontalAvoidanceForce, DesiredHorizontalVelocity);
+            const FVector EffectiveAvoidanceForce = RedirectedAvoidanceForce(HorizontalAvoidanceForce, DesiredHorizontalVelocity).GetClampedToMaxSize(MaxSidestepSpeed);
             FVector HorizontalVelocityDelta = (AccelInput + EffectiveAvoidanceForce) * DeltaTime * 4.f;
 
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;
@@ -654,7 +654,7 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
 
             FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
             AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
-            const FVector EffectiveAvoidanceForce = RedirectedAvoidanceForce(HorizontalAvoidanceForce, DesiredHorizontalVelocity);
+            const FVector EffectiveAvoidanceForce = RedirectedAvoidanceForce(HorizontalAvoidanceForce, DesiredHorizontalVelocity).GetClampedToMaxSize(MaxSidestepSpeed);
             FVector HorizontalVelocityDelta = (AccelInput + EffectiveAvoidanceForce) * DeltaTime * 4.f;
 
             FVector NewHorizontalVelocity = CurrentHorizontalVelocity + HorizontalVelocityDelta;

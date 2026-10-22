@@ -67,7 +67,8 @@ void UUnitSeparationProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
-	EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
+	// Idle stays in the query. A standing unit that is walked into has to take the sidestep
+	// itself; excluding it left only the capsule pop, which is a jump rather than a walk.
 	EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateStopSeparationTag>(EMassFragmentPresence::None);

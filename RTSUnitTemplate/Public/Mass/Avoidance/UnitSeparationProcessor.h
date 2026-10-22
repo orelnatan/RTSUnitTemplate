@@ -15,7 +15,7 @@ struct FMassExecutionContext;
 
 	/**
 	 * Applies a lateral repulsion force between nearby units to avoid clumping.
-	 * Includes all active states (Attack, Run, Chase, Pause, Build, Repair).
+	 * Includes idle units, so a unit that is walked into steps aside instead of being left to the capsule.
 	 * Uses FMassForceFragment so the existing movement processor can consume it.
 	 */
 UCLASS()
@@ -32,9 +32,9 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
-	// Throttling
+	// 0 = every frame. A 0.1s tick wrote the whole shove in one frame, which is the sideways hop.
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
-	float ExecutionInterval = 0.1f;
+	float ExecutionInterval = 0.f;
 	
 	// Separate repulsion strengths for friendly vs enemy interactions
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")

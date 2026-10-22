@@ -49,6 +49,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Ausweichen", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float AvoidanceBrakeFactor = 0.25f;
 
+	/**
+	 * Cap on the avoidance force before it is added to velocity.
+	 * The integrator treats that force as a velocity (equilibrium speed equals the force).
+	 * Separation used to arrive as overlap*50 once every 0.1s, and MaxSpeed is 10000, so the
+	 * touched unit was launched. 200 is under the walk samples near 300 and above the idle
+	 * anim threshold, so the sidestep plays a strafe instead of a hop.
+	 */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Ausweichen", meta = (ClampMin = "0.0"))
+	float MaxSidestepSpeed = 200.f;
+
 	/** Dreht eine bremsende Ausweichkraft seitlich um. Siehe Kommentar oben. */
 	FVector RedirectedAvoidanceForce(const FVector& Ausweichkraft, const FVector& Sollgeschwindigkeit) const;
 	

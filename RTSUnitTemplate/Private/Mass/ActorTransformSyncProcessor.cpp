@@ -962,7 +962,10 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
     {
         if (AActor* Actor = Update.ActorPtr.Get())
         {
-            Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::None);
+            // TeleportPhysics: this is a Mass snap, not a swept move. TeleportType::None makes the
+            // physics body invent a velocity from the position delta, which reads as a sideways hop
+            // when two capsules overlap.
+            Actor->SetActorTransform(Update.NewTransform, false, nullptr, ETeleportType::TeleportPhysics);
         }
     }
 }

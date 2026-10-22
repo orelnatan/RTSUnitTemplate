@@ -115,14 +115,19 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	Attributes = CreateDefaultSubobject<UAttributeSetBase>("Attributes");
 
-	// Example: Inside AUnitBase::AUnitBase() constructor
+	// Mass moves these units. Character Movement's RVO and pawn-push run on top of that and
+	// throw a touched unit sideways in one step. Movement stays off so the capsule does not
+	// depenetrate. The Pawn channel stays Block: selection traces this channel, and an Overlap
+	// response would make units unclickable. Spacing is UUnitSeparationProcessor.
 	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
 	if (MoveComp)
 	{
-		MoveComp->bUseRVOAvoidance = true;
-		MoveComp->AvoidanceWeight = 1.0f;         // Higher weight = higher priority
-		MoveComp->SetAvoidanceEnabled(true);  // Adjust based on unit size
-		MoveComp->AvoidanceConsiderationRadius = 100.0f; // How far to check for obstacles
+		MoveComp->bUseRVOAvoidance = false;
+		MoveComp->SetAvoidanceEnabled(false);
+		MoveComp->bEnablePhysicsInteraction = false;
+		MoveComp->GravityScale = 0.f;
+		MoveComp->DefaultLandMovementMode = MOVE_None;
+		MoveComp->SetMovementMode(MOVE_None);
 	}
 
 	SetCanAffectNavigationGeneration(true, true); // Enable dynamic NavMesh updates
