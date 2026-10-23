@@ -325,6 +325,16 @@ public:
 
 protected:
 	void HandleSelectionRectangle();
+
+	/** Scaled marquee corners in drag order. False until the mouse has moved at least 2 pixels on either axis. */
+	bool ComputeMarqueeCorners(FVector2D& OutFirstCorner, FVector2D& OutSecondCorner) const;
+
+	/** Units whose screen position lies in the rectangle. Does not change the selection. */
+	void GatherUnitsInMarquee(const FVector2D& RectMin, const FVector2D& RectMax, TArray<AUnitBase*>& OutUnits);
+
+	/** Selects the given units. Does not clear an existing selection. */
+	void ApplyMarqueeSelection(const TArray<AUnitBase*>& Units);
+
 	void DrawDashedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness);
 	void DrawDashDottedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness);
 
@@ -552,6 +562,19 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax);
+
+	/**
+	 * Marquee filter. The gather already keeps CanBeSelected units of SelectableTeamId
+	 * (every team when that id is 0). The default returns InUnits unchanged.
+	 * Override on a HUD Blueprint to drop buildings, allies, or enemies.
+	 * A building is Cast<ABuildingBase>. An ally has IsMyTeam and a different TeamId.
+	 * An enemy has IsMyTeam == false.
+	 */
+	UFUNCTION(BlueprintNativeEvent, Category = "RTS|HUD|Selection")
+	TArray<AUnitBase*> FilterMarqueeUnits(const TArray<AUnitBase*>& InUnits);
+
+	/** Runs the marquee gather, the filter, and the select. No-op when the drag is shorter than 2 pixels. */
+	void CommitMarqueeSelection();
 	
 	void Tick(float DeltaSeconds);
 	void BeginPlay() override;

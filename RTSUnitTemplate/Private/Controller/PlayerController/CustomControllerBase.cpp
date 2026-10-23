@@ -4529,7 +4529,12 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
         else
         {
             HUDBase->InitialPoint = HUDBase->GetMousePos2D();
+            HUDBase->CurrentPoint = HUDBase->InitialPoint;
             HUDBase->bSelectFriendly = true;
+            HUDBase->DeselectAllUnits();
+            HUDBase->SelectedUnits.Empty();
+            HUDBase->SelectedUnitsSet.Empty();
+            SelectedUnits.Empty();
         }
     }
 }
@@ -5463,7 +5468,12 @@ void ACustomControllerBase::LeftClickReleasedMass()
 	// line below overwrites it from the HUD.
 	FinishFormationLineDrag(/*bFromRightMouse=*/false);
 
+	const bool bWasMarquee = HUDBase->bSelectFriendly;
 	LeftClickIsPressed = false;
+	if (bWasMarquee)
+	{
+		HUDBase->CommitMarqueeSelection();
+	}
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
 

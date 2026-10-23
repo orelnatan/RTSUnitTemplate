@@ -1179,116 +1179,85 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 	}
 }
 
+bool AHUDBase::ComputeMarqueeCorners(FVector2D& OutFirstCorner, FVector2D& OutSecondCorner) const
+{
+	if (FMath::Abs(InitialPoint.X - CurrentPoint.X) < 2.f && FMath::Abs(InitialPoint.Y - CurrentPoint.Y) < 2.f)
+	{
+		return false;
+	}
+
+	const FVector2D Center = (InitialPoint + CurrentPoint) * 0.5f;
+	const FVector2D ScaledSize = (CurrentPoint - InitialPoint) * RectangleScaleSelectionFactor;
+	OutFirstCorner = Center - (ScaledSize * 0.5f);
+	OutSecondCorner = Center + (ScaledSize * 0.5f);
+	return true;
+}
+
 void AHUDBase::HandleSelectionRectangle()
 {
 	if (!bSelectFriendly) return;
 
-	DeselectAllUnits();
-	SelectedUnits.Empty();
-	SelectedUnitsSet.Empty();
 	CurrentPoint = GetMousePos2D();
 
-	if (FMath::Abs(InitialPoint.X - CurrentPoint.X) >= 2)
+	FVector2D InitialSelectionPoint;
+	FVector2D CurrentSelectionPoint;
+	if (!ComputeMarqueeCorners(InitialSelectionPoint, CurrentSelectionPoint))
 	{
-		// Zentrum und volle Größe berechnen
-		FVector2D Center = (InitialPoint + CurrentPoint) * 0.5f;
-		FVector2D FullSize = CurrentPoint - InitialPoint;
+		return;
+	}
 
-		// Skaliertes Rechteck berechnen
-		FVector2D ScaledSize = FullSize * RectangleScaleSelectionFactor;
-		FVector2D InitialSelectionPoint = Center - (ScaledSize * 0.5f);
-		FVector2D CurrentSelectionPoint = Center + (ScaledSize * 0.5f);
+	if (SelectionRectSettings.bDrawFill)
+	{
+		DrawRect(SelectionRectSettings.FillColor, InitialSelectionPoint.X, InitialSelectionPoint.Y,
+			CurrentSelectionPoint.X - InitialSelectionPoint.X,
+			CurrentSelectionPoint.Y - InitialSelectionPoint.Y);
+	}
 
-		// 1. Zeichnen des Rechtecks (Nur das Selektions-Rechteck behalten)
-		if (SelectionRectSettings.bDrawFill)
+	if (SelectionRectSettings.bDrawBorder)
+	{
+		const FVector2D TopLeft = InitialSelectionPoint;
+		const FVector2D TopRight(CurrentSelectionPoint.X, InitialSelectionPoint.Y);
+		const FVector2D BottomRight = CurrentSelectionPoint;
+		const FVector2D BottomLeft(InitialSelectionPoint.X, CurrentSelectionPoint.Y);
+
+		if (SelectionRectSettings.BorderType == Line)
 		{
-			DrawRect(SelectionRectSettings.FillColor, InitialSelectionPoint.X, InitialSelectionPoint.Y,
-				CurrentSelectionPoint.X - InitialSelectionPoint.X,
-				CurrentSelectionPoint.Y - InitialSelectionPoint.Y);
+			DrawLine(TopLeft.X, TopLeft.Y, TopRight.X, TopRight.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+			DrawLine(TopRight.X, TopRight.Y, BottomRight.X, BottomRight.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+			DrawLine(BottomRight.X, BottomRight.Y, BottomLeft.X, BottomLeft.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+			DrawLine(BottomLeft.X, BottomLeft.Y, TopLeft.X, TopLeft.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
 		}
-
-		if (SelectionRectSettings.bDrawBorder)
+		else
 		{
-			// Zeichne die 4 Linien des Rechtecks
-			const FVector2D TopLeft = InitialSelectionPoint;
-			const FVector2D TopRight(CurrentSelectionPoint.X, InitialSelectionPoint.Y);
-			const FVector2D BottomRight = CurrentSelectionPoint;
-			const FVector2D BottomLeft(InitialSelectionPoint.X, CurrentSelectionPoint.Y);
+			float Dash = SelectionRectSettings.DashLength;
+			float Gap = SelectionRectSettings.GapLength;
 
-			if (SelectionRectSettings.BorderType == Line)
+			if (SelectionRectSettings.BorderType == Dotted)
 			{
-				DrawLine(TopLeft.X, TopLeft.Y, TopRight.X, TopRight.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-				DrawLine(TopRight.X, TopRight.Y, BottomRight.X, BottomRight.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-				DrawLine(BottomRight.X, BottomRight.Y, BottomLeft.X, BottomLeft.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-				DrawLine(BottomLeft.X, BottomLeft.Y, TopLeft.X, TopLeft.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				Dash = SelectionRectSettings.BorderThickness;
+				Gap = SelectionRectSettings.GapLength;
+
+				DrawDashedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+			}
+			else if (SelectionRectSettings.BorderType == DashDotted)
+			{
+				DrawDashDottedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashDottedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashDottedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashDottedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
 			}
 			else
 			{
-				float Dash = SelectionRectSettings.DashLength;
-				float Gap = SelectionRectSettings.GapLength;
-
-				if (SelectionRectSettings.BorderType == Dotted)
-				{
-					Dash = SelectionRectSettings.BorderThickness;
-					Gap = SelectionRectSettings.GapLength;
-
-					DrawDashedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-				}
-				else if (SelectionRectSettings.BorderType == DashDotted)
-				{
-					DrawDashDottedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashDottedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashDottedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashDottedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-				}
-				else // Dashed
-				{
-					DrawDashedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-					DrawDashedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
-				}
+				DrawDashedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawDashedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
 			}
 		}
-
-		// 2. Selektions-Logik
-		TArray<AUnitBase*> NewUnitBases;
-		GetActorsInSelectionRectangle<AUnitBase>(InitialSelectionPoint, CurrentSelectionPoint, NewUnitBases, false, false);
-
-		ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
-		const FVector2D SelectionRectMin(FMath::Min(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Min(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
-		const FVector2D SelectionRectMax(FMath::Max(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Max(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
-
-		for (AUnitBase* Unit : NewUnitBases) {
-			if (!Unit) continue;
-			//const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
-			if (Controller && Unit->CanBeSelected && !IsForeignCameraUnit(Unit) && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0)) //  && !SUnit
-			{
-				FVector2D ScreenLocation;
-				if (Controller->ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), ScreenLocation))
-				{
-					if (ScreenLocation.X >= SelectionRectMin.X && ScreenLocation.X <= SelectionRectMax.X &&
-						ScreenLocation.Y >= SelectionRectMin.Y && ScreenLocation.Y <= SelectionRectMax.Y)
-					{
-						//if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
-						Unit->SetSelected();
-						SelectedUnits.Emplace(Unit);
-						SelectedUnitsSet.Add(Unit);
-						SelectUnitsFromSameSquad(Unit);
-					}
-				}
-			}
-		}
-
-		NewUnitBases.Empty();
-		if (Controller) Controller->AbilityArrayIndex = 0;
 	}
-
-	// Mass-Units/ISM Logik
-	SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
 }
 
 void AHUDBase::DrawMaterialWall(const FVector& Start, const FVector& End, float Height, UMaterialInterface* Material, const FLinearColor& Color)
@@ -1390,8 +1359,7 @@ void AHUDBase::DrawHUD()
 	DrawSelectedBuildingWaypointLinks();
 	DrawSelectedUnitsMovementLines();
 
-	// Before HandleSelectionRectangle: that call can rebuild SelectedUnits (and empties it every
-	// frame while bSelectFriendly is true), so anything reading the selection must run first.
+	// The marquee only draws here. Selection is cleared when the drag starts and filled on release.
 	DrawFormationLinePreview();
 
 	HandleSelectionRectangle();
@@ -1484,115 +1452,131 @@ void AHUDBase::DrawFormationLinePreview()
 	}
 }
 
+void AHUDBase::GatherUnitsInMarquee(const FVector2D& RectMin, const FVector2D& RectMax, TArray<AUnitBase*>& OutUnits)
+{
+	APlayerController* PC = GetOwningPlayerController();
+	ACameraControllerBase* Controller = Cast<ACameraControllerBase>(PC);
+	if (!PC || !Controller)
+	{
+		return;
+	}
+
+	const float MinX = FMath::Min(RectMin.X, RectMax.X);
+	const float MaxX = FMath::Max(RectMin.X, RectMax.X);
+	const float MinY = FMath::Min(RectMin.Y, RectMax.Y);
+	const float MaxY = FMath::Max(RectMin.Y, RectMax.Y);
+
+	// Screen position, not the actor bounds. A skeletal unit with collision off has no
+	// bounds for GetActorsInSelectionRectangle, so the projected location is the test.
+	for (TActorIterator<AMassUnitBase> It(GetWorld()); It; ++It)
+	{
+		AMassUnitBase* Unit = *It;
+		if (!Unit) continue;
+
+		if (Controller->SelectableTeamId != 0 && Unit->TeamId != Controller->SelectableTeamId)
+		{
+			continue;
+		}
+
+		AUnitBase* UnitBase = Cast<AUnitBase>(Unit);
+		if (!UnitBase || !UnitBase->CanBeSelected || IsForeignCameraUnit(UnitBase))
+		{
+			continue;
+		}
+
+		bool bInside = false;
+		if (Unit->bUseSkeletalMovement)
+		{
+			FVector2D ScreenLoc;
+			if (PC->ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), ScreenLoc))
+			{
+				bInside = ScreenLoc.X >= MinX && ScreenLoc.X <= MaxX && ScreenLoc.Y >= MinY && ScreenLoc.Y <= MaxY;
+			}
+		}
+		else if (const FMassUnitVisualFragment* VisualFrag = Unit->GetVisualFragment())
+		{
+			for (const FMassUnitVisualInstance& VisualInst : VisualFrag->VisualInstances)
+			{
+				UInstancedStaticMeshComponent* ISM = VisualInst.TargetISM.Get();
+				if (!ISM) continue;
+
+				FTransform Xform;
+				ISM->GetInstanceTransform(VisualInst.InstanceIndex, Xform, /*bWorldSpace=*/true);
+
+				FVector2D ScreenLoc;
+				if (!PC->ProjectWorldLocationToScreen(Xform.GetLocation(), ScreenLoc))
+				{
+					continue;
+				}
+
+				if (ScreenLoc.X >= MinX && ScreenLoc.X <= MaxX && ScreenLoc.Y >= MinY && ScreenLoc.Y <= MaxY)
+				{
+					bInside = true;
+					break;
+				}
+			}
+		}
+
+		if (bInside)
+		{
+			OutUnits.AddUnique(UnitBase);
+		}
+	}
+}
+
+TArray<AUnitBase*> AHUDBase::FilterMarqueeUnits_Implementation(const TArray<AUnitBase*>& InUnits)
+{
+	return InUnits;
+}
+
+void AHUDBase::ApplyMarqueeSelection(const TArray<AUnitBase*>& Units)
+{
+	APlayerController* PC = GetOwningPlayerController();
+	for (AUnitBase* Unit : Units)
+	{
+		if (!IsValid(Unit) || SelectedUnitsSet.Contains(Unit))
+		{
+			continue;
+		}
+
+		if (PC && Unit->GetOwner() == nullptr)
+		{
+			Unit->SetOwner(PC);
+		}
+
+		Unit->SetSelected();
+		SelectedUnits.Add(Unit);
+		SelectedUnitsSet.Add(Unit);
+		SelectUnitsFromSameSquad(Unit);
+	}
+}
+
+void AHUDBase::CommitMarqueeSelection()
+{
+	CurrentPoint = GetMousePos2D();
+
+	FVector2D FirstCorner;
+	FVector2D SecondCorner;
+	if (!ComputeMarqueeCorners(FirstCorner, SecondCorner))
+	{
+		return;
+	}
+
+	TArray<AUnitBase*> Gathered;
+	GatherUnitsInMarquee(FirstCorner, SecondCorner, Gathered);
+	ApplyMarqueeSelection(FilterMarqueeUnits(Gathered));
+
+	if (ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController()))
+	{
+		Controller->AbilityArrayIndex = 0;
+	}
+}
+
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
 {
-    APlayerController* PC = GetOwningPlayerController();
-    ACameraControllerBase* Controller = Cast<ACameraControllerBase>(PC);
-    if (!Controller)
-        return;
-
-    // Iterate all MassUnitBase actors (which includes UnitBase)
-	for (TActorIterator<AMassUnitBase> It(GetWorld()); It; ++It)
-    {
-        AMassUnitBase* Unit = *It;
-        if (!Unit) continue;
-
-        if (Controller->SelectableTeamId != 0 && Unit->TeamId != Controller->SelectableTeamId)
-            continue;
-
-        if (AUnitBase* UB = Cast<AUnitBase>(Unit))
-        {
-            if (!UB->CanBeSelected) continue;
-            if (IsForeignCameraUnit(UB)) continue; // CameraUnit eines anderen Spielers
-        }
-
-        // Test each instance from VisualInstances in fragment
-        // SKELETT-EINHEITEN HABEN KEINE ISM-INSTANZ - sie werden ueber ihre Lage erfasst.
-        //
-        // Frueher stand hier ein "if (bUseSkeletalMovement) continue;" und SKM-Einheiten wurden
-        // stattdessen von GetActorsInSelectionRectangle erfasst. Das laeuft aber ueber
-        // GetComponentsBoundingBox, und der Aufruf weiter oben uebergibt bIncludeNonColliding
-        // = false - seit RTS.Units.NoCollision die Kapsel abschaltet, hat eine SKM-Einheit damit
-        // keine Huelle mehr und fiel aus der Rahmenauswahl heraus. Per Linksklick ging sie
-        // weiterhin, weil dort UMassUnitHoverProcessor greift, der rein geometrisch arbeitet.
-        //
-        // Statt die Engine-Huelle zu reparieren, macht dieser Zweig es wie der ISM-Zweig darunter:
-        // Lage projizieren, gegen das Rechteck pruefen. Das braucht KEINE Kollision und ist damit
-        // von jeder Kollisionseinstellung unabhaengig.
-        if (Unit->bUseSkeletalMovement)
-        {
-            FVector2D SkmScreenLoc;
-            if (!PC->ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), SkmScreenLoc))
-                continue;
-
-            if (SkmScreenLoc.X >= FMath::Min(RectMin.X, RectMax.X) &&
-                SkmScreenLoc.X <= FMath::Max(RectMin.X, RectMax.X) &&
-                SkmScreenLoc.Y >= FMath::Min(RectMin.Y, RectMax.Y) &&
-                SkmScreenLoc.Y <= FMath::Max(RectMin.Y, RectMax.Y))
-            {
-                if (AUnitBase* SkmUnit = Cast<AUnitBase>(Unit))
-                {
-                    if (!SelectedUnits.Contains(SkmUnit))
-                    {
-                        if (SkmUnit->GetOwner() == nullptr)
-                        {
-                            SkmUnit->SetOwner(Controller);
-                        }
-                        SkmUnit->SetSelected();
-                        SelectedUnits.AddUnique(SkmUnit);
-                        SelectedUnitsSet.Add(SkmUnit);
-                        SelectUnitsFromSameSquad(SkmUnit);
-                    }
-                }
-            }
-            continue;
-        }
-
-        const FMassUnitVisualFragment* VisualFrag = Unit->GetVisualFragment();
-        if (!VisualFrag) continue;
-
-        for (const FMassUnitVisualInstance& VisualInst : VisualFrag->VisualInstances)
-        {
-            UInstancedStaticMeshComponent* ISM = VisualInst.TargetISM.Get();
-            if (!ISM) continue;
-            int32 Index = VisualInst.InstanceIndex;
-
-        {
-            FTransform Xform;
-            ISM->GetInstanceTransform(Index, Xform, /*bWorldSpace=*/true);
-            FVector WorldLoc = Xform.GetLocation();
-
-
-            FVector2D ScreenLoc;
-            if (!PC->ProjectWorldLocationToScreen(WorldLoc, ScreenLoc))
-                continue;
-
-            // Screen‑space AABB test
-            if (ScreenLoc.X >= FMath::Min(RectMin.X, RectMax.X) &&
-                ScreenLoc.X <= FMath::Max(RectMin.X, RectMax.X) &&
-                ScreenLoc.Y >= FMath::Min(RectMin.Y, RectMax.Y) &&
-                ScreenLoc.Y <= FMath::Max(RectMin.Y, RectMax.Y))
-            {
-                // Select this unit only if not already selected to reduce network traffic
-                if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
-                {
-                    if (!SelectedUnits.Contains(UnitBase))
-                    {
-                        if (UnitBase->GetOwner() == nullptr)
-                        {
-                            UnitBase->SetOwner(Controller);
-                        }
-                        UnitBase->SetSelected();
-                        SelectedUnits.AddUnique(UnitBase);
-                        SelectedUnitsSet.Add(UnitBase);
-                        SelectUnitsFromSameSquad(UnitBase);
-                    }
-                }
-                break;  // one hit is enough
-            }
-        }
-    }
-    }
+	TArray<AUnitBase*> Gathered;
+	GatherUnitsInMarquee(RectMin, RectMax, Gathered);
+	ApplyMarqueeSelection(FilterMarqueeUnits(Gathered));
 }
 
 void AHUDBase::Tick(float DeltaSeconds)
