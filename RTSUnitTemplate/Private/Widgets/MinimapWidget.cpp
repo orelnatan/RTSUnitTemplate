@@ -7,6 +7,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h" // Change this path to match your file structure
+#include "Characters/Unit/BuildingBase.h"
 #include "Engine/Texture2D.h"
 
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
@@ -220,7 +221,43 @@ FReply UMinimapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
             return FReply::Handled();
         }
 
-        // Default behavior: move camera to minimap location
+        // Own mobile units take a move order. An empty selection, or only buildings, still pans the camera.
+        bool bHasOwnUnit = false;
+        if (Ctrl)
+        {
+            for (AUnitBase* Unit : Ctrl->SelectedUnits)
+            {
+                if (!Unit || Cast<ABuildingBase>(Unit))
+                {
+                    continue;
+                }
+                if (Ctrl->SelectableTeamId != 0 && Unit->TeamId != Ctrl->SelectableTeamId)
+                {
+                    continue;
+                }
+                bHasOwnUnit = true;
+                break;
+            }
+        }
+
+        if (bHasOwnUnit)
+        {
+            FVector2D WorldXY;
+            if (!ComputeWorldXY(WorldXY))
+            {
+                return FReply::Unhandled();
+            }
+            FVector Ground;
+            LineTraceGround(WorldXY, Ground);
+
+            FHitResult MoveHit;
+            MoveHit.Location = Ground;
+            MoveHit.ImpactPoint = Ground;
+            MoveHit.bBlockingHit = true;
+            Ctrl->RunUnitsAndSetWaypointsMass(MoveHit);
+            return FReply::Handled();
+        }
+
         MoveCameraToMinimapLocation(LocalMousePosition, WidgetSize);
         return FReply::Handled();
     }
