@@ -88,7 +88,15 @@ protected:
 	// Tries to cancel active abilities for selected units. Returns true if any ability was canceled.
 	bool TryCancelActiveAbilities();
 
+	/** Move, attack, follow, repair, work, rally, and Shift-queue. A left-button drag stays the marquee, so this does not arm the formation line. */
+	void IssueSelectionCommand();
+
+	/** Hit from a left press that may become either a marquee or an order. */
+	FHitResult PendingLeftClickHit;
+
 public:
+	void ClearUnitSelection();
+
 	/**
 	 * Traegt das Loesen vom Wegpunkt auf den Server - ohne das wirkt es beim Client NICHT.
 	 *

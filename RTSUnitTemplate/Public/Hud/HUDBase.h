@@ -598,6 +598,9 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "bSelectFriendly", Keywords = "TopDownRTSTemplate bSelectFriendly"), Category = "TopDownRTSTemplate")
 	bool bSelectFriendly = false;
+
+	/** True after this drag has already cleared the previous selection. Reset while the drag is still shorter than a box. */
+	bool bMarqueeDidClearSelection = false;
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "InitialPoint", Keywords = "RTSUnitTemplate InitialPoint"), Category = "RTSUnitTemplate")
 	FVector2D InitialPoint;
