@@ -1911,6 +1911,12 @@ void AHUDBase::DrawAllHealthBars()
 	int32 ViewX = 0, ViewY = 0;
 	PC->GetViewportSize(ViewX, ViewY);
 
+	AUnitBase* Hovered = nullptr;
+	if (ACustomControllerBase* HoverCtrl = Cast<ACustomControllerBase>(PC))
+	{
+		Hovered = HoverCtrl->HoveredUnit.Get();
+	}
+
 	int32 CurrentVisibleCount = 0;
 
 	auto DrawBarsForArray = [&](const TArray<AUnitBase*>& Units) {
@@ -1920,6 +1926,7 @@ void AHUDBase::DrawAllHealthBars()
 			if (!IsValid(Unit) || !Unit->Attributes || Unit->Attributes->GetHealth() <= 0.f) continue;
 
 			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+			const bool bIsHovered = Unit == Hovered;
 
 			// Early viewport check as requested
 			if (!Unit->IsOnViewport) continue;
@@ -1928,11 +1935,12 @@ void AHUDBase::DrawAllHealthBars()
 			const float CurrentTime = GetWorld()->GetTimeSeconds();
 			const bool bVisible = Unit->IsMyTeam || Unit->IsVisibleEnemy || (CurrentTime - Unit->LastVisibleTime < 0.2f);
 
-			// Allow selected units, or OWN-TEAM units under "show all", to bypass the visibility gate.
-			// The permanent show-all must NOT reveal fogged/hidden ENEMY bars, so it is restricted to
-			// this player's own team (Unit->IsMyTeam is computed local-player-relative by the Mass
-			// visibility processor); enemies still require bVisible (revealed) or bIsSelected.
-			if (!bVisible && !bIsSelected && !(bShowAllHealthBarsPermanent && Unit->IsMyTeam)) continue;
+			// Allow selected units, the unit under the cursor, or OWN-TEAM units under "show all",
+			// to bypass the visibility gate. The permanent show-all must NOT reveal fogged/hidden
+			// ENEMY bars, so it is restricted to this player's own team (Unit->IsMyTeam is computed
+			// local-player-relative by the Mass visibility processor); enemies still require bVisible
+			// (revealed), bIsSelected, or bIsHovered.
+			if (!bVisible && !bIsSelected && !bIsHovered && !(bShowAllHealthBarsPermanent && Unit->IsMyTeam)) continue;
 
 			// Einstellungs-Auswahl (Vorläufige Bestimmung)
 			bool bIsBuilding = !Unit->CanMove;
@@ -2028,7 +2036,7 @@ void AHUDBase::DrawAllHealthBars()
 			// (Unit->IsVisibleEnemy is a client-local, per-frame FOW signal). Gate 1 above already culled
 			// fogged enemies, so adding IsVisibleEnemy here makes an out-of-FOW enemy show a permanent bar
 			// and re-hide when it re-enters the fog — without needing a damage/level popup.
-			if (!(bShowAllHealthBarsPermanent && (Unit->IsMyTeam || Unit->IsVisibleEnemy)) && !Unit->OpenHealthWidget && !Unit->bShowLevelOnly && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
+			if (!bIsHovered && !(bShowAllHealthBarsPermanent && (Unit->IsMyTeam || Unit->IsVisibleEnemy)) && !Unit->OpenHealthWidget && !Unit->bShowLevelOnly && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
 
 			// 3. Einzige Projektion für diesen Frame
 			FVector2D ScreenPos;
@@ -2087,8 +2095,10 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 {
 	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
 	const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+	const ACustomControllerBase* HoverCtrl = Cast<ACustomControllerBase>(GetOwningPlayerController());
+	const bool bIsHovered = HoverCtrl && HoverCtrl->HoveredUnit.Get() == Unit;
 
-	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !(Settings.bShowHealthbarOnSelected && bIsSelected))
+	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !bIsHovered && !(Settings.bShowHealthbarOnSelected && bIsSelected))
 	{
 		DrawLevelText(Unit, ScreenPos, Settings);
 		return;
@@ -2215,8 +2225,10 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 {
 	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
 	const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+	const ACustomControllerBase* HoverCtrl = Cast<ACustomControllerBase>(GetOwningPlayerController());
+	const bool bIsHovered = HoverCtrl && HoverCtrl->HoveredUnit.Get() == Unit;
 
-	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !(Settings.bShowHealthbarOnSelected && bIsSelected))
+	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !bIsHovered && !(Settings.bShowHealthbarOnSelected && bIsSelected))
 	{
 		DrawLevelText(Unit, ScreenPos, Settings);
 		return;
@@ -2369,8 +2381,10 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc
 {
 	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
 	const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+	const ACustomControllerBase* HoverCtrl = Cast<ACustomControllerBase>(GetOwningPlayerController());
+	const bool bIsHovered = HoverCtrl && HoverCtrl->HoveredUnit.Get() == Unit;
 
-	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !(Settings.bShowHealthbarOnSelected && bIsSelected))
+	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !bIsHovered && !(Settings.bShowHealthbarOnSelected && bIsSelected))
 	{
 		DrawLevelText(Unit, ScreenPos, Settings);
 		return;
