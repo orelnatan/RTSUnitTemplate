@@ -169,31 +169,11 @@ FReply UMinimapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
         return false;
     };
 
-    // Handle Right Mouse Button: issue move commands for selected units via controller
+    // Right click pans the camera and leaves the selection alone. A right click on the world still deselects.
     if (Button == EKeys::RightMouseButton)
     {
-        FVector2D WorldXY;
-        if (!ComputeWorldXY(WorldXY))
-        {
-            return FReply::Unhandled();
-        }
-        FVector Ground;
-        LineTraceGround(WorldXY, Ground);
-
-        // Call controller function
-        APlayerController* PC = GetOwningPlayer();
-        ACustomControllerBase* Ctrl = PC ? Cast<ACustomControllerBase>(PC) : nullptr;
-        if (!Ctrl)
-        {
-            APawn* Pawn = GetOwningPlayerPawn();
-            Ctrl = Pawn ? Cast<ACustomControllerBase>(Pawn->GetController()) : nullptr;
-        }
-        if (Ctrl)
-        {
-            Ctrl->RightClickPressedMassMinimap(Ground);
-            return FReply::Handled();
-        }
-        return FReply::Unhandled();
+        MoveCameraToMinimapLocation(LocalMousePosition, WidgetSize);
+        return FReply::Handled();
     }
 
     // Handle Left Mouse Button
