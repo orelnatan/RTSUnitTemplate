@@ -1212,7 +1212,7 @@ FVector AControllerBase::CalculateGridOffset(int32 Row, int32 Col) const
 
 void AControllerBase::DrawCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor)
 {
-	if (HUDBase)
+	if (HUDBase && HUDBase->bShowClickIndicators)
 	{
 		HUDBase->AddClickIndicator(Location, CircleColor);
 	}

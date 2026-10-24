@@ -457,6 +457,11 @@ public:
 	// Draws store and cargo amounts (called from DrawHUD).
 	void DrawLogisticsAmounts();
 
+	/** When false, move and attack orders do not spawn a destination circle per unit.
+	 *  The formation targets are unchanged; only the click-indicator draw is skipped. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bShowClickIndicators = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;
 
