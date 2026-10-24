@@ -389,6 +389,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DrawCircleAtLocation(UWorld* World, const FVector& Location, FColor CircleColor);
 
+	/** One pulse at the order point. The per-unit circles stay behind bShowClickIndicators. */
+	void ShowMoveDestinationMarker(const FVector& Location);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector TraceRunLocation(FVector RunLocation, bool& HitNavModifier);
 

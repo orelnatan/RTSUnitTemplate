@@ -4038,6 +4038,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 		}
     }
 
+    if (PlayRun)
+    {
+        ShowMoveDestinationMarker(AdjustedLocation);
+    }
+
     if (WaypointSound && PlayWaypoint)
     {
         UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
@@ -5386,12 +5391,14 @@ bool ACustomControllerBase::FinishFormationLineDrag(bool bFromRightMouse)
 		}
 	}
 
-	// Destination feedback for the order that actually executes. The press-time order already drew
-	// indicators at the click point; without these the player would see circles where the units are
-	// not going and none where they are.
-	for (const FVector& Loc : TargetLocs)
+	if (TargetLocs.Num() > 0)
 	{
-		DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
+		FVector Center = FVector::ZeroVector;
+		for (const FVector& Loc : TargetLocs)
+		{
+			Center += Loc;
+		}
+		ShowMoveDestinationMarker(Center / TargetLocs.Num());
 	}
 
 	TArray<float> TargetRadii;

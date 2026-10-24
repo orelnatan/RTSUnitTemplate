@@ -1218,6 +1218,14 @@ void AControllerBase::DrawCircleAtLocation(UWorld* World, const FVector& Locatio
 	}
 }
 
+void AControllerBase::ShowMoveDestinationMarker(const FVector& Location)
+{
+	if (HUDBase)
+	{
+		HUDBase->AddClickIndicator(Location, FColor::Green, 2.5f, 140.f);
+	}
+}
+
 #define COLLISION_NAVMODIFIER ECC_GameTraceChannel1
 static TAutoConsoleVariable<int32> CVarRTS_TraceRunComplex(
 	TEXT("RTS.TraceRunComplex"),
@@ -1504,6 +1512,11 @@ void AControllerBase::RunUnitsAndSetWaypoints(FHitResult Hit)
 	if (WaypointSound && PlayWaypointSound)
 	{
 		UGameplayStatics::PlaySound2D(this, WaypointSound, GetSoundMultiplier());
+	}
+
+	if (PlayRunSound)
+	{
+		ShowMoveDestinationMarker(Hit.Location);
 	}
 
 	if (RunSound && PlayRunSound)
