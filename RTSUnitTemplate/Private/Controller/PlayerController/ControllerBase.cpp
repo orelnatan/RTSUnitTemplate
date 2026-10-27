@@ -1284,7 +1284,7 @@ void AControllerBase::ShowMoveDestinationMarker(const FVector& Location)
 {
 	if (HUDBase)
 	{
-		HUDBase->AddClickIndicator(Location, FColor::Green, 2.5f, 140.f);
+		HUDBase->AddClickIndicator(Location, FColor::Green, 2.5f, 90.f);
 	}
 }
 

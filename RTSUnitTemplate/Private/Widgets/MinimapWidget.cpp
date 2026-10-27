@@ -3,7 +3,6 @@
 #include "Components/Image.h"
 #include "Kismet/GameplayStatics.h"
 #include "Actors/MinimapActor.h" // Change this path to match your file structure
-#include "Characters/Camera/ExtendedCameraBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h" // Change this path to match your file structure
@@ -249,34 +248,10 @@ FReply UMinimapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
 void UMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
-    // 1. Den Kamera-Pawn holen.
-    ACameraBase* CameraPawn = Cast<ACameraBase>(GetOwningPlayerPawn());
-    if (CameraPawn && MinimapImage)
+    if (MinimapImage)
     {
-        // 2. Den Yaw der Kamera in WELTKOORDINATEN abfragen.
-        //
-        // Hier stand `CameraPawn->SpringArmRotator.Yaw`, und das ist der Yaw RELATIV zum Pawn.
-        // Der Pawn selbst wird nie gedreht (CameraBase dreht ausschliesslich den SpringArm), er
-        // behaelt also die Drehung seines PlayerStarts fuer die ganze Partie. Steht dieser
-        // PlayerStart nicht auf Yaw 0 - was bei der zweiten Fraktion der Normalfall ist, weil sie
-        // von der Gegenseite ins Feld schaut - fehlt der Minimap genau dieser feste Betrag.
-        // Das erklaert alle drei gemeldeten Symptome auf einmal, denn CurrentMapAngle treibt sie
-        // alle: verdrehtes Bild, falschherum stehende Kamerakennzeichnung und den Klickversatz
-        // (siehe ComputeWorldXY und MoveCameraToMinimapLocation).
-        // Die Weltdrehung des SpringArms enthaelt beides, Pawn- und Relativdrehung. Bei einem
-        // PlayerStart mit Yaw 0 kommt derselbe Wert heraus wie vorher - fuer die Fraktion, bei
-        // der es bisher stimmte, aendert sich also nichts.
-        const float CameraYaw = CameraPawn->SpringArm
-            ? CameraPawn->SpringArm->GetComponentRotation().Yaw
-            : CameraPawn->GetActorRotation().Yaw + CameraPawn->SpringArmRotator.Yaw;
-
-        // 3. Den finalen Winkel für das Bild berechnen.
-        // Wir starten mit unserer Basis-Rotation von -90 Grad.
-        // Wenn die Kamera sich dreht, muss die Minimap sich "gegenläufig" drehen,
-        // damit die Ausrichtung wieder stimmt. Daher ziehen wir den Kamera-Yaw ab.
-        CurrentMapAngle = -90.0f - CameraYaw;
-
-        // 4. Den Rotationswinkel auf das Bild anwenden.
+        // Square map stays fixed while the camera yaws. Clicks undo this same angle.
+        CurrentMapAngle = -90.0f;
         MinimapImage->SetRenderTransformAngle(CurrentMapAngle);
     }
 }
