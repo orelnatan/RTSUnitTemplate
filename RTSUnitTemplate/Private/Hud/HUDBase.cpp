@@ -29,6 +29,7 @@
 #include "Characters/Unit/MassUnitBase.h"
 #include "Core/CollisionUtils.h"
 #include "Components/BoxComponent.h"
+#include "InputCoreTypes.h"
 
 // Project-Specific Headers
 #include "GAS/AttributeSetBase.h"
@@ -1182,7 +1183,7 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 
 bool AHUDBase::ComputeMarqueeCorners(FVector2D& OutFirstCorner, FVector2D& OutSecondCorner) const
 {
-	if (FMath::Abs(InitialPoint.X - CurrentPoint.X) < 2.f && FMath::Abs(InitialPoint.Y - CurrentPoint.Y) < 2.f)
+	if (FMath::Abs(InitialPoint.X - CurrentPoint.X) < MarqueeDragThreshold && FMath::Abs(InitialPoint.Y - CurrentPoint.Y) < MarqueeDragThreshold)
 	{
 		return false;
 	}
@@ -1198,6 +1199,19 @@ void AHUDBase::HandleSelectionRectangle()
 {
 	if (!bSelectFriendly) return;
 
+	// The left press arms bSelectFriendly and LeftClickReleasedMass normally disarms it. That release
+	// can be swallowed - BlockControls became true in between (menu, pause, StopAllCameraMovement) or
+	// the button came up over UI - and then this function kept running with no button held: the next
+	// few pixels of mouse movement called ClearUnitSelection() and the player's selection vanished on
+	// its own. Decide on the physical button instead of on the press/release event pair.
+	APlayerController* OwningPC = GetOwningPlayerController();
+	if (!OwningPC || !OwningPC->IsInputKeyDown(EKeys::LeftMouseButton))
+	{
+		bSelectFriendly = false;
+		bMarqueeDidClearSelection = false;
+		return;
+	}
+
 	CurrentPoint = GetMousePos2D();
 
 	FVector2D InitialSelectionPoint;
@@ -1207,6 +1221,11 @@ void AHUDBase::HandleSelectionRectangle()
 		bMarqueeDidClearSelection = false;
 		return;
 	}
+
+	// Remember the live rect: the release can land back at the press point after the selection was
+	// already cleared, and CommitMarqueeSelection would then have nothing to gather from.
+	LastMarqueeFirstCorner = InitialSelectionPoint;
+	LastMarqueeSecondCorner = CurrentSelectionPoint;
 
 	if (!bMarqueeDidClearSelection)
 	{
@@ -1570,7 +1589,15 @@ void AHUDBase::CommitMarqueeSelection()
 	FVector2D SecondCorner;
 	if (!ComputeMarqueeCorners(FirstCorner, SecondCorner))
 	{
-		return;
+		// The selection was already cleared for this drag, but the cursor returned to the press point,
+		// so the release-time rect is degenerate. Refill from the last live rect instead of leaving the
+		// player with nothing selected.
+		if (!bMarqueeDidClearSelection)
+		{
+			return;
+		}
+		FirstCorner = LastMarqueeFirstCorner;
+		SecondCorner = LastMarqueeSecondCorner;
 	}
 
 	TArray<AUnitBase*> Gathered;

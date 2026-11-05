@@ -622,6 +622,17 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "RectangleScaleSelectionFactor", Keywords = "RTSUnitTemplate RectangleScaleSelectionFactor"), Category = "RTSUnitTemplate")
 	float RectangleScaleSelectionFactor = 0.9f;
 
+	// How far the cursor has to travel before a left press counts as a box drag. This was a hard-coded
+	// 2 px in ComputeMarqueeCorners AND in LeftClickReleasedMass: a click with a couple of pixels of
+	// hand jitter was treated as a box, which cleared the selection and then captured nothing.
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "MarqueeDragThreshold", Keywords = "RTSUnitTemplate MarqueeDragThreshold"), Category = "RTSUnitTemplate")
+	float MarqueeDragThreshold = 8.f;
+
+	// Last drag rect that was wide enough to be a box. CommitMarqueeSelection falls back to it when the
+	// selection was already cleared during the drag but the cursor came back to the press point.
+	FVector2D LastMarqueeFirstCorner = FVector2D::ZeroVector;
+	FVector2D LastMarqueeSecondCorner = FVector2D::ZeroVector;
+
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = "RTSUnitTemplate")
 	FVector2D GetMousePos2D();
 

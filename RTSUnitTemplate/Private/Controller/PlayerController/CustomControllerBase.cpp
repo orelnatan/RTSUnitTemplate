@@ -4526,6 +4526,12 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
             PendingLeftClickHit = HitPawn;
             HUDBase->InitialPoint = HUDBase->GetMousePos2D();
             HUDBase->CurrentPoint = HUDBase->InitialPoint;
+            // Every press starts a fresh drag. Without this reset a quick click would be finished as the
+            // PREVIOUS box (bMarqueeDidClearSelection was still set) and could re-select what that old
+            // box captured.
+            HUDBase->bMarqueeDidClearSelection = false;
+            HUDBase->LastMarqueeFirstCorner = HUDBase->InitialPoint;
+            HUDBase->LastMarqueeSecondCorner = HUDBase->InitialPoint;
             HUDBase->bSelectFriendly = true;
         }
     }
@@ -5467,8 +5473,13 @@ void ACustomControllerBase::LeftClickReleasedMass()
 	if (bWasMarquee)
 	{
 		HUDBase->CurrentPoint = HUDBase->GetMousePos2D();
-		const bool bDrag = FMath::Abs(HUDBase->InitialPoint.X - HUDBase->CurrentPoint.X) >= 2.f
-			|| FMath::Abs(HUDBase->InitialPoint.Y - HUDBase->CurrentPoint.Y) >= 2.f;
+		// Same threshold the HUD used to draw the box and to clear: a click must not lose the selection
+		// because the hand moved a pixel or two. bMarqueeDidClearSelection means the box already
+		// happened, so this press has to be finished as a box even if the cursor came back.
+		const float MarqueeThreshold = HUDBase->MarqueeDragThreshold;
+		const bool bDrag = HUDBase->bMarqueeDidClearSelection
+			|| FMath::Abs(HUDBase->InitialPoint.X - HUDBase->CurrentPoint.X) >= MarqueeThreshold
+			|| FMath::Abs(HUDBase->InitialPoint.Y - HUDBase->CurrentPoint.Y) >= MarqueeThreshold;
 		if (bDrag)
 		{
 			ClearUnitSelection();
