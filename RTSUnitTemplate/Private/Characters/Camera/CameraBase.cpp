@@ -10,6 +10,7 @@
 #include "AIController.h"
 #include "Landscape.h"
 #include "LandscapeProxy.h"
+#include "Core/RTSGround.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "UnrealEngine.h"
@@ -934,7 +935,7 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 	if (bHit)
 	{
 		AActor* HitActor = HitResult.GetActor();
-		if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
+		if (RTSGround::IsGround(HitActor))
 		{
 			if (ProposedLocation.Z < HitResult.Location.Z)
 			{
