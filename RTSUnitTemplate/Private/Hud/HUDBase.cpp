@@ -35,7 +35,6 @@
 #include "Characters/Unit/HealingUnit.h"
 #include "Elements/Actor/ActorElementData.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
-#include "Controller/PlayerController/CustomControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
@@ -1204,17 +1203,7 @@ void AHUDBase::HandleSelectionRectangle()
 	FVector2D CurrentSelectionPoint;
 	if (!ComputeMarqueeCorners(InitialSelectionPoint, CurrentSelectionPoint))
 	{
-		bMarqueeDidClearSelection = false;
 		return;
-	}
-
-	if (!bMarqueeDidClearSelection)
-	{
-		if (ACustomControllerBase* Controller = Cast<ACustomControllerBase>(GetOwningPlayerController()))
-		{
-			Controller->ClearUnitSelection();
-		}
-		bMarqueeDidClearSelection = true;
 	}
 
 	if (SelectionRectSettings.bDrawFill)

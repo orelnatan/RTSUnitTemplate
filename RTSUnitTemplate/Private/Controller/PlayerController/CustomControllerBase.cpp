@@ -2707,23 +2707,7 @@ bool ACustomControllerBase::TryCancelActiveAbilities()
 	return bAnyAbilityCanceled;
 }
 
-void ACustomControllerBase::ClearUnitSelection()
-{
-	if (HUDBase)
-	{
-		HUDBase->DeselectAllUnits();
-		HUDBase->SelectedUnits.Empty();
-		HUDBase->SelectedUnitsSet.Empty();
-	}
-	SelectedUnits.Empty();
-}
-
 void ACustomControllerBase::RightClickPressedMass()
-{
-	ClearUnitSelection();
-}
-
-void ACustomControllerBase::IssueSelectionCommand()
 {
 	Batch_RemoveRotateToMouseTag();
 
@@ -2734,6 +2718,18 @@ void ACustomControllerBase::IssueSelectionCommand()
 	
 	if (SwapAttackMove && AttackToggled)
 	{
+		// Swapped layout: attack-move lives on the RIGHT button. Arm the line drag here, before
+		// HandleAttackMovePressed clears AttackToggled, so the release knows this was attack-move.
+		if (CanStartFormationLineDrag())
+		{
+			FHitResult DragHit;
+			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, DragHit);
+			if (DragHit.bBlockingHit)
+			{
+				BeginFormationLineDrag(DragHit.Location, /*bAttackMove=*/true, /*bFromRightMouse=*/true);
+			}
+		}
+
 		HandleAttackMovePressed();
 		AttackToggled = false;
 		return;
@@ -2799,6 +2795,13 @@ void ACustomControllerBase::IssueSelectionCommand()
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 		if (!CheckClickOnWorkArea(Hit))
 		{
+			// Arm the move line drag. The press-time order below still runs, so a plain click is
+			// unchanged; a real drag simply re-targets the same units on release.
+			if (Hit.bBlockingHit && CanStartFormationLineDrag())
+			{
+				BeginFormationLineDrag(Hit.Location, /*bAttackMove=*/false, /*bFromRightMouse=*/true);
+			}
+
 			RunUnitsAndSetWaypointsMass(Hit);
 		}
 	}
@@ -2809,9 +2812,32 @@ void ACustomControllerBase::IssueSelectionCommand()
 	}
 }
 
-void ACustomControllerBase::RightClickPressedMassMinimap(const FVector& /*GroundLocation*/)
+void ACustomControllerBase::RightClickPressedMassMinimap(const FVector& GroundLocation)
 {
-	ClearUnitSelection();
+	// Ignore pawn hits and follow logic for minimap
+	AttackToggled = false;
+
+	if (!SelectedUnits.Num())
+	{
+		return;
+	}
+
+	if (TryCancelActiveAbilities())
+	{
+		return;
+	}
+
+	// If we are dragging a work area, destroy it as in normal right-click behavior
+	if (SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea)
+	{
+		DestroyDraggedArea(SelectedUnits[0]);
+		return;
+	}
+
+	// Synthesize a hit result using minimap ground location and reuse existing logic
+	FHitResult SynthHit;
+	SynthHit.Location = GroundLocation;
+	RunUnitsAndSetWaypointsMass(SynthHit);
 }
 
 void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& GroundLocation)
@@ -4260,6 +4286,8 @@ void ACustomControllerBase::LeftClickPressedMass()
         return;
     }
 
+    if (SwapAttackMove) AttackToggled = false;
+	
     // --- ALT: cancel / destroy area ---
 	if (AltIsPressed)
     {
@@ -4496,10 +4524,7 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
 
         ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(HitActor);
 
-        const bool bOwnSelectable = HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit;
-        // Buildings and construction sites stay on the order path, so a short click can repair, rally, or assign work.
-        const bool bSelectNow = bOwnSelectable && !HitUnit->bIsBuilding && !HitUnit->bIsConstructionUnit;
-        if (bSelectNow)
+        if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
         {
             if (IsCtrlPressed)
             {
@@ -4523,10 +4548,13 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
         }
         else
         {
-            PendingLeftClickHit = HitPawn;
             HUDBase->InitialPoint = HUDBase->GetMousePos2D();
             HUDBase->CurrentPoint = HUDBase->InitialPoint;
             HUDBase->bSelectFriendly = true;
+            HUDBase->DeselectAllUnits();
+            HUDBase->SelectedUnits.Empty();
+            HUDBase->SelectedUnitsSet.Empty();
+            SelectedUnits.Empty();
         }
     }
 }
@@ -5466,26 +5494,7 @@ void ACustomControllerBase::LeftClickReleasedMass()
 	LeftClickIsPressed = false;
 	if (bWasMarquee)
 	{
-		HUDBase->CurrentPoint = HUDBase->GetMousePos2D();
-		const bool bDrag = FMath::Abs(HUDBase->InitialPoint.X - HUDBase->CurrentPoint.X) >= 2.f
-			|| FMath::Abs(HUDBase->InitialPoint.Y - HUDBase->CurrentPoint.Y) >= 2.f;
-		if (bDrag)
-		{
-			ClearUnitSelection();
-			HUDBase->CommitMarqueeSelection();
-		}
-		else if (SelectedUnits.Num() > 0)
-		{
-			IssueSelectionCommand();
-		}
-		else if (AUnitBase* HitUnit = GetUnitFromHitResult(PendingLeftClickHit))
-		{
-			if (HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !Cast<ASpeakingUnit>(HitUnit))
-			{
-				HUDBase->DeselectAllUnits();
-				HUDBase->SetUnitSelected(HitUnit, bIsAi);
-			}
-		}
+		HUDBase->CommitMarqueeSelection();
 	}
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
