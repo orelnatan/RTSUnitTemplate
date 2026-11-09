@@ -1924,12 +1924,15 @@ void AHUDBase::DrawAllHealthBars()
 			const float CurrentTime = GetWorld()->GetTimeSeconds();
 			const bool bVisible = Unit->IsMyTeam || Unit->IsVisibleEnemy || (CurrentTime - Unit->LastVisibleTime < 0.2f);
 
-			// Allow selected units, the unit under the cursor, or OWN-TEAM units under "show all",
-			// to bypass the visibility gate. The permanent show-all must NOT reveal fogged/hidden
-			// ENEMY bars, so it is restricted to this player's own team (Unit->IsMyTeam is computed
-			// local-player-relative by the Mass visibility processor); enemies still require bVisible
-			// (revealed), bIsSelected, or bIsHovered.
-			if (!bVisible && !bIsSelected && !bIsHovered && !(bShowAllHealthBarsPermanent && Unit->IsMyTeam)) continue;
+			// FOG GATE (09.11.2026).
+			//
+			// Nothing draws a bar for a unit the local player cannot observe, and hovering or
+			// selecting one is NOT an exemption any more. The hover processor now refuses fogged
+			// units (UMassUnitHoverProcessor::Execute), so bIsHovered can only be set for an
+			// observable unit. Own-team and allied units always pass via IsMyTeam, so a selected
+			// unit keeps its bar - the old bIsSelected exemption was only ever meaningful for them.
+			// bShowAllHealthBarsPermanent is covered by the same IsMyTeam term.
+			if (!bVisible) continue;
 
 			// Einstellungs-Auswahl (Vorläufige Bestimmung)
 			bool bIsBuilding = !Unit->CanMove;

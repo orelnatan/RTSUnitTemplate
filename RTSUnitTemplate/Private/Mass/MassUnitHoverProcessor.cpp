@@ -73,6 +73,14 @@ void UMassUnitHoverProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 	EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassHoverFragment>(EMassFragmentAccess::ReadWrite);
+
+	// FOG GATE (09.11.2026).
+	//
+	// The visibility fragment carries the client-local answer to "can the local player observe
+	// this unit right now" - the same answer that hides the mesh (see
+	// APerformanceUnit::ComputeInherentVisibility). Optional, so an archetype built outside the
+	// visibility pathway keeps the old, unfiltered hover instead of losing hover entirely.
+	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All); // All units and buildings
 
 	// TOTE Entitaeten fallen raus.
@@ -222,6 +230,8 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 		const auto VisualFrags = ChunkContext.GetFragmentView<FMassUnitVisualFragment>();
 		const auto ActorFrags = ChunkContext.GetFragmentView<FMassActorFragment>();
 		const auto CharFrags = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+		// nullptr when the archetype has no visibility fragment - see ConfigureQueries.
+		const FMassVisibilityFragment* VisFrags = ChunkContext.GetFragmentView<FMassVisibilityFragment>().GetData();
 
 		CheckedEntities += ChunkContext.GetNumEntities();
 
@@ -236,6 +246,20 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
 			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
+
+			// FOG GATE (09.11.2026).
+			//
+			// Without this line the ray still hit the capsule of an enemy that the fog had already
+			// hidden: the geometry test below knows nothing about visibility. The result became
+			// ACustomControllerBase::HoveredUnit, and AHUDBase::DrawAllHealthBars used to exempt the
+			// hovered unit from its own fog gate - so the bar was drawn through the fog.
+			//
+			// Same rule the mesh uses: not own team and not a currently revealed enemy means not
+			// observable, hence not a hover target.
+			if (VisFrags && !VisFrags[i].bIsMyTeam && !VisFrags[i].bIsVisibleEnemy)
+			{
+				continue;
+			}
 
 			// TREFFERPRUEFUNG (01.10.2026): Vorfilter, dann drei getrennte Formen.
 			//
