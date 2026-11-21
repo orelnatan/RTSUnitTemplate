@@ -24,6 +24,8 @@
 #include "HAL/IConsoleManager.h"
 #include "DrawDebugHelpers.h"
 #include "Core/RTSUnitGeometry.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Layout/WidgetPath.h"
 
 static TAutoConsoleVariable<float> CVarHoverInterval(
 	TEXT("rts.hover.interval"),
@@ -45,6 +47,29 @@ static TAutoConsoleVariable<int32> CVarHoverDebugDraw(
 	TEXT("BoxCollision-Box blau, Mesh-Box gelb; die getroffene Form dick. 2 = zusaetzlich den ")
 	TEXT("Vorfilter-Zylinder (grau) jedes Kandidaten."),
 	ECVF_Default);
+
+// True when the cursor is on a widget that catches the mouse, such as the control bar.
+// Over the world the topmost widget is the game viewport, and the hover ray should run.
+static bool IsCursorOverBlockingWidget()
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+
+	FSlateApplication& SlateApp = FSlateApplication::Get();
+	const FWidgetPath Path = SlateApp.LocateWindowUnderMouse(
+		SlateApp.GetCursorPos(),
+		SlateApp.GetInteractiveTopLevelWindows(),
+		false);
+
+	if (!Path.IsValid() || Path.Widgets.Num() == 0)
+	{
+		return false;
+	}
+
+	return Path.Widgets.Last().Widget->GetTypeAsString() != TEXT("SViewport");
+}
 
 // DIE DREI HOVER-FORMEN (01.10.2026).
 //
@@ -199,9 +224,19 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	ACustomControllerBase* LocalPC = Cast<ACustomControllerBase>(World->GetFirstPlayerController());
 	if (!LocalPC || !LocalPC->IsLocalController()) return;
 
-	FVector RayOrigin, RayDirection;
-	if (!LocalPC->DeprojectMousePositionToWorld(RayOrigin, RayDirection)) return;
-	FVector RayEnd = RayOrigin + RayDirection * 100000.f;
+	// A click on the control bar is already swallowed by the widget. This ray is not,
+	// so a unit behind the bar still became the hovered unit and drew its health bar.
+	const bool bCursorOverWidget = IsCursorOverBlockingWidget();
+
+	FVector RayOrigin = FVector::ZeroVector;
+	FVector RayDirection = FVector::ZeroVector;
+	const bool bTraceWorld = !bCursorOverWidget
+		&& LocalPC->DeprojectMousePositionToWorld(RayOrigin, RayDirection);
+	if (!bCursorOverWidget && !bTraceWorld)
+	{
+		return;
+	}
+	const FVector RayEnd = bTraceWorld ? RayOrigin + RayDirection * 100000.f : FVector::ZeroVector;
 
 	// Messung der eigentlichen Pruefung - ohne sie ist "zu rechenintensiv?" nicht zu beantworten.
 	const double CheckStartSeconds = FPlatformTime::Seconds();
@@ -224,6 +259,8 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	// Linienspuren noch einmal zu suchen (siehe ACustomControllerBase::HoveredUnit).
 	TWeakObjectPtr<AUnitBase> BestUnit = nullptr;
 
+	if (bTraceWorld)
+	{
 	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
 	{
 		const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
@@ -339,6 +376,7 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			}
 		}
 	}));
+	}
 
 	LastCheckedEntities = CheckedEntities;
 	LastCheckMilliseconds = (float)((FPlatformTime::Seconds() - CheckStartSeconds) * 1000.0);
