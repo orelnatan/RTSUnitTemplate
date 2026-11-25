@@ -3963,6 +3963,16 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	}
 }
 
+// Same test the server runs on the drop, so red here means the drop will be refused.
+static void FlashGhostIfEnemyOnSite(const AUnitBase* Placer, AWorkArea* Ghost)
+{
+	if (IsValid(Placer) && IsValid(Ghost) && !Ghost->AreaDropped
+		&& Ghost->FindEnemyUnitOnSite(AWorkArea::MakeFriendlyMask(Placer)))
+	{
+		Ghost->TemporarilyChangeMaterial();
+	}
+}
+
 void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
 {
     // Ensure we have a unit and a dragged work area
@@ -3991,6 +4001,7 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
         if (Unit)
         {
             UpdateExtensionWorkAreaPosition(DraggedWorkArea, Unit, DeltaSeconds);
+            FlashGhostIfEnemyOnSite(SelectedUnits[0], DraggedWorkArea);
 
             if (Unit->ExtensionSnapMethod == EExtensionSnapMethod::None && !DraggedWorkArea->AreaDropped)
             {
@@ -4011,6 +4022,7 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
     // Non-extension areas: use simplified path first
     if (MoveWorkArea_Local_Simplified(DeltaSeconds))
     {
+        FlashGhostIfEnemyOnSite(SelectedUnits[0], DraggedWorkArea);
         return;
     }
 
@@ -7245,12 +7257,33 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			}
 		}
 
+		// Generals rule: an enemy ground unit on the footprint refuses the site outright - no rescue
+		// search, the ghost already showed red while it stood there. Own and allied units step aside.
+		const int64 SiteFriendlyMask = AWorkArea::MakeFriendlyMask(UnitBase);
+		if (const AUnitBase* EnemyOnSite = DraggedWorkArea->FindEnemyUnitOnSite(SiteFriendlyMask))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: rejected, enemy unit %s (team %d) stands on %s."),
+			       *EnemyOnSite->GetName(), EnemyOnSite->TeamId, *DraggedWorkArea->GetName());
+			if (InDropWorkAreaFailedSound)
+			{
+				Client_PlaySound2D(InDropWorkAreaFailedSound);
+			}
+			DraggedWorkArea->Destroy();
+			UnitBase->BuildArea = nullptr;
+			UnitBase->CurrentDraggedWorkArea = nullptr;
+			CancelCurrentAbility(UnitBase);
+			SendWorkerToBase(UnitBase);
+			return true;
+		}
+
 		if (UnitBase->IsWorker)
 		{
 			if (DropWorkAreaSound)
 			{
 				Client_PlaySound2D(DropWorkAreaSound);
 			}
+
+			DraggedWorkArea->SecureSiteAgainstUnits(this, SiteFriendlyMask, UnitBase);
 
 			// Capture the placement parameters BEFORE the worker is committed, so a Shift-chain
 			// can re-arm an identical WorkArea (SpawnWorkAreaReplicated needs the same 7 params).
@@ -7337,6 +7370,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 				UnitBase->CurrentDraggedWorkArea->GetActorTransform(), UnitBase);
 			Server_SpawnExtensionConstructionUnit(UnitBase, UnitBase->CurrentDraggedWorkArea);
+			UnitBase->CurrentDraggedWorkArea->SecureSiteAgainstUnits(this, SiteFriendlyMask, UnitBase);
 			// Waende bauende Tuerme sperren nicht pauschal: sie duerfen bis MaxEnergyWalls
 			// Verbindungen (fertige Waende plus laufende Baustellen) gleichzeitig anlegen.
 			ABuildingBase* WandTurm = Cast<ABuildingBase>(UnitBase);

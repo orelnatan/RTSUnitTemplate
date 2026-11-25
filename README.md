@@ -47,3 +47,12 @@ Regardless of whether you use the free or paid tier, **you are strictly prohibit
  Open "PowerShell" as admin
 
  Run - & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" AlliesEditor Win64 Development "-Project=c:\Users\Orel Natan\Documents\Unreal Projects\Allies\Allies.uproject" -WaitMutex
+
+# To view shapes on runtime:
+
+ rts.hover.debugdraw 1
+
+# To view Navmesh on runtime:
+
+ show Navigation
+ nav.DrawDistance 100000

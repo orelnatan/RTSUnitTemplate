@@ -2859,6 +2859,15 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 									if (NewUnit->HasAuthority() && !NewUnit->NavObstacleProxy) NewUnit->Multicast_RegisterBuildingAsObstacle();
 
+									// The building's obstacle is registered, so the site's can go without leaving a gap.
+									// Anything still standing on the footprint is walked off, enemies included.
+									if (UnitBase->BuildArea && UnitBase->BuildArea->HasAuthority())
+									{
+										UnitBase->BuildArea->EvacuateUnitsFromSite(ControllerBase,
+											AWorkArea::MakeFriendlyMask(UnitBase), /*bIncludeEnemies=*/true, UnitBase);
+										UnitBase->BuildArea->Multicast_UnregisterSiteObstacle();
+									}
+
 									if (NewUnit->bUseSkeletalMovement)
 									{
 										NewUnit->InitializeUnitMode();
@@ -4380,6 +4389,18 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			Worker->BuildArea->AddWorkerToArray(Worker);
 		}
 	}
+
+	// An enemy on a site that has not started yet holds the start back until it leaves. Once the
+	// build runs, the site obstacle keeps everyone out, so only the start is checked.
+	if (!UnitBase->BuildArea->IsExtensionArea && UnitBase->BuildArea->CurrentBuildTime <= 0.f
+		&& !UnitBase->BuildArea->ConstructionUnit
+		&& UnitBase->BuildArea->IsEnemyOnSiteThrottled(AWorkArea::MakeFriendlyMask(UnitBase)))
+	{
+		StateFrag->StateTimer = 0.f;
+		UnitBase->UnitControlTimer = 0.f;
+		return;
+	}
+
 	// If more than one worker is currently building at this area (clamped by MaxWorkerCount),
 	// increase this worker's build timer additively by 0.5x per second using stored DeltaTime.
 	if (UnitBase->BuildArea && !UnitBase->BuildArea->IsExtensionArea)

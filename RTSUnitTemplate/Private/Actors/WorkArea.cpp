@@ -17,6 +17,12 @@
 #include "Engine/Texture.h"
 #include "Actors/FogActor.h"   // IsWorldPositionRevealed (fog gate for planned build sites)
 #include "Controller/PlayerController/CustomControllerBase.h"   // AlliedTeamsMask
+#include "GAS/AttributeSetBase.h"
+#include "NavigationSystem.h"
+#include "NavModifierComponent.h"
+#include "NavAreas/NavArea_Obstacle.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "Components/BoxComponent.h"
 
 
 namespace
@@ -1495,6 +1501,10 @@ void AWorkArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		OccupyingBuilding = nullptr;
 	}
 
+	// The proxy is local to every machine, so every machine clears its own - a cancelled site must
+	// not leave a hole in the navmesh behind.
+	RemoveSiteObstacleLocal();
+
 	Super::EndPlay(EndPlayReason);
 	if (UWorld* World = GetWorld())
 	{
@@ -1955,4 +1965,315 @@ void AWorkArea::RespawnConsumedWorker()
 
 	// Nur einmal ersetzen.
 	ConsumedWorkerClass = nullptr;
+}
+
+namespace
+{
+	bool IsTeamInSiteMask(int32 InTeamId, int64 Mask)
+	{
+		return InTeamId >= 0 && InTeamId < 64 && (Mask & (1LL << InTeamId)) != 0;
+	}
+
+	// Only ground units can stand in the way of a site. Buildings, construction sites, flyers, the
+	// dead and passengers of a transport cannot.
+	bool IsSiteRelevantUnit(const AUnitBase* Unit)
+	{
+		if (!IsValid(Unit) || Unit->bIsBuilding || Unit->bIsConstructionUnit || Unit->IsA<ABuildingBase>())
+		{
+			return false;
+		}
+		if (Unit->IsFlying || Unit->IsInsideTransport || Unit->IsDragged || Unit->IsOnPlattform)
+		{
+			return false;
+		}
+		if (Unit->GetUnitState() == UnitData::Dead)
+		{
+			return false;
+		}
+		return !(Unit->Attributes && Unit->Attributes->GetHealth() <= 0.f);
+	}
+
+	float SiteUnitRadius(const AUnitBase* Unit)
+	{
+		const UCapsuleComponent* Capsule = Unit->GetCapsuleComponent();
+		return Capsule ? Capsule->GetScaledCapsuleRadius() : 50.f;
+	}
+
+	bool IsOnSiteFootprint(const FVector& Location, float Radius, const FVector& Center, const FVector& Extent)
+	{
+		return FMath::Abs(Location.X - Center.X) < Extent.X + Radius
+			&& FMath::Abs(Location.Y - Center.Y) < Extent.Y + Radius;
+	}
+}
+
+int64 AWorkArea::MakeFriendlyMask(const AUnitBase* Unit)
+{
+	if (!Unit)
+	{
+		return 0;
+	}
+	int64 Mask = Unit->AlliedTeamsMask;
+	if (Unit->TeamId >= 0 && Unit->TeamId < 64)
+	{
+		Mask |= (1LL << Unit->TeamId);
+	}
+	return Mask;
+}
+
+bool AWorkArea::GetSiteFootprint(FVector& OutCenter, FVector& OutExtent) const
+{
+	if (!Mesh)
+	{
+		return false;
+	}
+	const FBoxSphereBounds Bounds = Mesh->CalcBounds(Mesh->GetComponentTransform());
+	OutCenter = Bounds.Origin;
+	OutExtent = Bounds.BoxExtent;
+	return OutExtent.X > 1.f && OutExtent.Y > 1.f;
+}
+
+AUnitBase* AWorkArea::FindEnemyUnitOnSite(int64 FriendlyMask) const
+{
+	UWorld* World = GetWorld();
+	FVector Center, Extent;
+	if (!World || !GetSiteFootprint(Center, Extent))
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* Unit = *It;
+		if (!IsSiteRelevantUnit(Unit) || Unit == ConstructionUnit || IsTeamInSiteMask(Unit->TeamId, FriendlyMask))
+		{
+			continue;
+		}
+		if (IsOnSiteFootprint(Unit->GetMassActorLocation(), SiteUnitRadius(Unit), Center, Extent))
+		{
+			return Unit;
+		}
+	}
+	return nullptr;
+}
+
+bool AWorkArea::IsEnemyOnSiteThrottled(int64 FriendlyMask)
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if (LastEnemyOnSiteCheckTime < 0.f || Now - LastEnemyOnSiteCheckTime >= 0.25f)
+	{
+		LastEnemyOnSiteCheckTime = Now;
+		bLastEnemyOnSite = FindEnemyUnitOnSite(FriendlyMask) != nullptr;
+	}
+	return bLastEnemyOnSite;
+}
+
+void AWorkArea::EvacuateUnitsFromSite(AExtendedControllerBase* Commander, int64 FriendlyMask, bool bIncludeEnemies, const AUnitBase* Builder)
+{
+	UWorld* World = GetWorld();
+	FVector Center, Extent;
+	if (!HasAuthority() || !World || !GetSiteFootprint(Center, Extent))
+	{
+		return;
+	}
+
+	// The move order goes through the regular batch move so that Mass, the server state and the client
+	// prediction all see the same command.
+	ACustomControllerBase* Mover = Cast<ACustomControllerBase>(Commander);
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It && !Mover; ++It)
+	{
+		Mover = Cast<ACustomControllerBase>(It->Get());
+	}
+	if (!Mover)
+	{
+		return;
+	}
+
+	const float Padding = FMath::Max(0.f, SiteObstaclePadding);
+	const FVector Blocked(Extent.X + Padding, Extent.Y + Padding, Extent.Z);
+
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	const ARecastNavMesh* Recast = NavSys ? Cast<ARecastNavMesh>(NavSys->GetNavDataForProps(FNavAgentProperties())) : nullptr;
+
+	auto FindFreeSpot = [&](const FVector& Probe, float Radius, FVector& OutSpot) -> bool
+	{
+		if (!NavSys)
+		{
+			OutSpot = Probe;
+			return true;
+		}
+		FNavLocation NavLoc;
+		if (!NavSys->ProjectPointToNavigation(Probe, NavLoc, FVector(200.f, 200.f, 1000.f)))
+		{
+			return false;
+		}
+		if (IsOnSiteFootprint(NavLoc.Location, Radius, Center, Blocked))
+		{
+			return false;
+		}
+		if (Recast)
+		{
+			const UClass* AreaClass = Recast->GetAreaClass(Recast->GetPolyAreaID(NavLoc.NodeRef));
+			if (AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass()))
+			{
+				return false;
+			}
+		}
+		OutSpot = NavLoc.Location;
+		return true;
+	};
+
+	// Straight out first, then fanning to both sides: the direct way can end on a cliff or a building.
+	static const float FanAngles[] = { 0.f, 30.f, -30.f, 60.f, -60.f, 90.f, -90.f, 135.f, -135.f, 180.f };
+
+	int32 Evacuated = 0;
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* Unit = *It;
+		if (!IsSiteRelevantUnit(Unit) || Unit == Builder || Unit == ConstructionUnit || !Unit->CanMove || Unit->BuildArea == this)
+		{
+			continue;
+		}
+		if (!bIncludeEnemies && !IsTeamInSiteMask(Unit->TeamId, FriendlyMask))
+		{
+			continue;
+		}
+
+		const FVector Location = Unit->GetMassActorLocation();
+		const float Radius = SiteUnitRadius(Unit);
+		if (!IsOnSiteFootprint(Location, Radius, Center, Blocked))
+		{
+			continue;
+		}
+
+		FVector Direction = (Location - Center).GetSafeNormal2D();
+		if (Direction.IsNearlyZero())
+		{
+			// Golden angle: several units stacked on the centre leave in different directions.
+			const float Angle = FMath::DegreesToRadians(137.5f * Evacuated);
+			Direction = FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f);
+		}
+
+		FVector Target = Location;
+		bool bFound = false;
+		for (const float FanAngle : FanAngles)
+		{
+			const FVector Dir = Direction.RotateAngleAxis(FanAngle, FVector::UpVector);
+			const float ToEdgeX = FMath::Abs(Dir.X) > KINDA_SMALL_NUMBER ? Blocked.X / FMath::Abs(Dir.X) : TNumericLimits<float>::Max();
+			const float ToEdgeY = FMath::Abs(Dir.Y) > KINDA_SMALL_NUMBER ? Blocked.Y / FMath::Abs(Dir.Y) : TNumericLimits<float>::Max();
+			FVector Probe = Center + Dir * (FMath::Min(ToEdgeX, ToEdgeY) + Radius + SiteEvacuationGap);
+			Probe.Z = Location.Z;
+			if (FindFreeSpot(Probe, Radius, Target))
+			{
+				bFound = true;
+				break;
+			}
+		}
+		if (!bFound)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Site] %s: no free spot found to move %s off the site."), *GetName(), *Unit->GetName());
+			continue;
+		}
+
+		// One order per unit: units ordered in one batch become a formation group, and a group marches
+		// to a shared shape instead of each unit taking its own way out.
+		const TArray<AUnitBase*> Units = { Unit };
+		const TArray<FVector> Targets = { Target };
+		const TArray<float> Speeds = { Unit->Attributes ? Unit->Attributes->GetRunSpeed() : 300.f };
+		const TArray<float> Radii = { Unit->MovementAcceptanceRadius };
+
+		// With Shift held (chained placement) the batch move would queue the order as a waypoint.
+		const bool bShiftWasPressed = Mover->IsShiftPressed;
+		Mover->IsShiftPressed = false;
+		Mover->Server_Batch_CorrectSetUnitMoveTargets(World, Units, Targets, Speeds, Radii,
+			/*AttackT=*/false, /*bResetHoldPosition=*/true, /*bResetFollowTarget=*/true, /*bOriginatorPredictsLocally=*/false);
+		Mover->IsShiftPressed = bShiftWasPressed;
+		++Evacuated;
+	}
+
+	if (Evacuated > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Site] %s: %d unit(s) sent off the site."), *GetName(), Evacuated);
+	}
+}
+
+void AWorkArea::SecureSiteAgainstUnits(AExtendedControllerBase* Commander, int64 FriendlyMask, const AUnitBase* Builder)
+{
+	if (!HasAuthority() || !bBlockSiteForUnits)
+	{
+		return;
+	}
+	EvacuateUnitsFromSite(Commander, FriendlyMask, /*bIncludeEnemies=*/false, Builder);
+	Multicast_RegisterSiteObstacle();
+}
+
+void AWorkArea::Multicast_RegisterSiteObstacle_Implementation()
+{
+	if (IsValid(SiteObstacleProxy))
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	FVector Center, Extent;
+	if (!World || !GetSiteFootprint(Center, Extent))
+	{
+		return;
+	}
+
+	Extent.X = FMath::Max(1.f, Extent.X + SiteObstaclePadding);
+	Extent.Y = FMath::Max(1.f, Extent.Y + SiteObstaclePadding);
+	// A flat site mesh is only a few units high; the modifier has to reach through the navmesh.
+	Center.Z = GetActorLocation().Z;
+	Extent.Z = FMath::Max(Extent.Z, 300.f);
+	const FBox Bounds(Center - Extent, Center + Extent);
+
+	SiteObstacleProxy = World->SpawnActor<AActor>();
+	if (!SiteObstacleProxy)
+	{
+		return;
+	}
+
+	UBoxComponent* BoxComp = NewObject<UBoxComponent>(SiteObstacleProxy);
+	BoxComp->SetWorldLocation(Center);
+	BoxComp->SetBoxExtent(Extent, false);
+	BoxComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SiteObstacleProxy->SetRootComponent(BoxComp);
+	BoxComp->RegisterComponent();
+
+	UNavModifierComponent* ModComp = NewObject<UNavModifierComponent>(SiteObstacleProxy);
+	ModComp->SetAreaClass(UNavArea_Obstacle::StaticClass());
+	ModComp->FailsafeExtent = Extent;
+	ModComp->RegisterComponent();
+
+	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+	{
+		NavSys->AddDirtyArea(Bounds, ENavigationDirtyFlag::All);
+	}
+}
+
+void AWorkArea::Multicast_UnregisterSiteObstacle_Implementation()
+{
+	RemoveSiteObstacleLocal();
+}
+
+void AWorkArea::RemoveSiteObstacleLocal()
+{
+	if (!IsValid(SiteObstacleProxy))
+	{
+		SiteObstacleProxy = nullptr;
+		return;
+	}
+
+	const FBox BoundsToDirty = SiteObstacleProxy->GetComponentsBoundingBox(true);
+	SiteObstacleProxy->Destroy();
+	SiteObstacleProxy = nullptr;
+
+	UWorld* World = GetWorld();
+	if (World && !World->bIsTearingDown)
+	{
+		if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
+		{
+			NavSys->AddDirtyArea(BoundsToDirty, ENavigationDirtyFlag::All);
+		}
+	}
 }

@@ -757,4 +757,55 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool GetAreaDropped() const { return AreaDropped; }
+
+	// --- Site rules (Generals style) ---
+	// An enemy ground unit on the footprint refuses the drop; own and allied units are sent out of
+	// the footprint, and from the drop until the building stands the site is a navigation obstacle.
+
+	// When false, units are neither evacuated nor blocked; enemies on the site still refuse the drop.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Site")
+	bool bBlockSiteForUnits = true;
+
+	// Grows the obstacle beyond the mesh footprint. The builder stops at ConstructionUnitReachFactor
+	// from the centre - if it stalls at the edge, raise that factor or lower this padding.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Site")
+	float SiteObstaclePadding = 0.f;
+
+	// Extra distance beyond the footprint edge (plus the unit's own radius) where evacuated units stop.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Site", meta = (ClampMin = "0"))
+	float SiteEvacuationGap = 100.f;
+
+	UPROPERTY()
+	TObjectPtr<AActor> SiteObstacleProxy;
+
+	// Own team plus allies of Unit, from its replicated AlliedTeamsMask - valid on server and clients.
+	static int64 MakeFriendlyMask(const AUnitBase* Unit);
+
+	// Mesh footprint in world space (XY), the box the placement checks use as well.
+	bool GetSiteFootprint(FVector& OutCenter, FVector& OutExtent) const;
+
+	// First living ground unit on the footprint whose team is not in FriendlyMask, or null.
+	AUnitBase* FindEnemyUnitOnSite(int64 FriendlyMask) const;
+
+	// FindEnemyUnitOnSite, re-evaluated at most every few tenths of a second. For per-tick callers.
+	bool IsEnemyOnSiteThrottled(int64 FriendlyMask);
+
+	// Server only. Interrupts the movable ground units on the footprint and walks each one straight out
+	// of it. Builder and the site's own workers stay. bIncludeEnemies also moves units outside FriendlyMask.
+	void EvacuateUnitsFromSite(class AExtendedControllerBase* Commander, int64 FriendlyMask, bool bIncludeEnemies, const AUnitBase* Builder);
+
+	// Server only: evacuate friendly units, then block the footprint for navigation on every machine.
+	void SecureSiteAgainstUnits(class AExtendedControllerBase* Commander, int64 FriendlyMask, const AUnitBase* Builder);
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_RegisterSiteObstacle();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_UnregisterSiteObstacle();
+
+private:
+	void RemoveSiteObstacleLocal();
+
+	float LastEnemyOnSiteCheckTime = -1.f;
+	bool bLastEnemyOnSite = false;
 };
